@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DUKFEET Media | Product Model Video</title>
+<meta name="description" content="DUKFEET 핸드메이드 가죽 신발의 실루엣과 착화 모습을 보여주는 상품 모델 영상 미디어 페이지입니다.">
+<!-- 이 페이지는 GitHub Pages 배포/리소스 확인용입니다. 아임웹 상품페이지 SEO와는 별개이며 검색 노출이 필요 없어 noindex 처리 -->
+<meta name="robots" content="noindex, nofollow">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Brand",
+  "name": "DUKFEET",
+  "description": "Handmade leather shoes brand focused on crafted leather texture, durable construction and refined everyday footwear."
+}
+</script>
+<style>
+  :root {
+    --enter: 800ms; --settle: 1500ms; --reveal: 900ms;
+    --ease: cubic-bezier(.22,.61,.36,1); --crop: 1.12;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; color: #1a1a1a; background: #faf8f5; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 20px 80px; }
+  h1 { font-size: clamp(22px,3vw,30px); margin: 0 0 6px; }
+  .sub { color: #666; margin: 0 0 28px; font-size: 14px; }
+  .frame {
+    position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden;
+    background: #000; border-radius: 8px; line-height: 0;
+  }
+  .frame__video {
+    position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%;
+    object-fit: cover; transform: scale(var(--crop)); transform-origin: center;
+    opacity: 0; transition: opacity var(--reveal) var(--ease); background: #000;
+  }
+  .frame__intro {
+    position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%;
+    object-fit: contain; background: #000; opacity: 0; transform: scale(1.02);
+    transition: opacity var(--enter) var(--ease), transform var(--settle) var(--ease);
+  }
+  .frame.is-intro-visible .frame__intro { opacity: 1; transform: scale(1); }
+  .frame.is-video-playing .frame__video { opacity: 1; }
+  .frame.is-video-playing .frame__intro { opacity: 0; pointer-events: none; }
+  .frame.is-intro-hidden .frame__intro { visibility: hidden; }
+  .frame.is-video-error .frame__intro { opacity: 1; visibility: visible; }
+  .frame.is-video-error .frame__video { opacity: 0; }
+
+  .links { margin-top: 36px; background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 20px 24px; }
+  .links h2 { font-size: 16px; margin: 0 0 12px; }
+  .links ul { margin: 0; padding-left: 18px; line-height: 2; word-break: break-all; }
+  .links a { color: #5a3a16; }
+  code { background:#f1ece5; padding:1px 5px; border-radius:4px; }
+  @media (prefers-reduced-motion: reduce) {
+    .frame__intro, .frame__video { transition: none !important; transform: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>DUKFEET Media</h1>
+    <p class="sub">상품 모델 영상 · GitHub Pages 호스팅 / 리소스 확인용 페이지</p>
+
+    <div class="frame" id="frame" data-dukfeet-motion>
+      <img class="frame__intro"
+           src="images/dukfeet-product-model-poster.png"
+           alt="DUKFEET 핸드메이드 가죽 신발 브랜드 로고"
+           width="410" height="410" decoding="async">
+      <video class="frame__video" muted loop playsinline preload="none"
+             poster="images/dukfeet-product-model-poster.png"
+             aria-label="DUKFEET 핸드메이드 가죽 신발의 착화 모습과 움직임을 보여주는 모델 영상"
+             data-src="videos/dukfeet-product-model-video.mp4?v=1"></video>
+      <noscript>
+        <img src="images/dukfeet-product-model-poster.png" alt="DUKFEET 핸드메이드 가죽 신발 브랜드 로고" loading="lazy">
+      </noscript>
+    </div>
+
+    <section class="links">
+      <h2>공개 리소스 (HTTPS)</h2>
+      <ul>
+        <li>기본 주소: <a href="https://skgns039-star.github.io/dukfeet-code-01/">https://skgns039-star.github.io/dukfeet-code-01/</a></li>
+        <li>영상(MP4): <a href="videos/dukfeet-product-model-video.mp4?v=1">.../videos/dukfeet-product-model-video.mp4?v=1</a></li>
+        <li>포스터(PNG): <a href="images/dukfeet-product-model-poster.png">.../images/dukfeet-product-model-poster.png</a></li>
+        <li>아임웹 코드: <a href="imweb/dukfeet-product-video-widget.html">.../imweb/dukfeet-product-video-widget.html</a></li>
+      </ul>
+      <p style="margin:12px 0 0;color:#888;font-size:13px;">캐시 갱신은 영상 URL의 <code>?v=1</code>을 <code>?v=2</code> 등으로 올리세요.</p>
+    </section>
+  </main>
+
+<script>
+(function(){
+  var frame = document.querySelector('[data-dukfeet-motion]');
+  if(!frame) return;
+  var video = frame.querySelector('.frame__video');
+  var intro = frame.querySelector('.frame__intro');
+  function showIntro(){ frame.classList.add('is-intro-visible'); }
+  if(intro){ if(intro.complete && intro.naturalWidth>0) showIntro(); else { intro.addEventListener('load',showIntro,{once:true}); intro.addEventListener('error',showIntro,{once:true}); } }
+  function reinforce(){ video.muted=true; video.loop=true; video.playsInline=true; }
+  var loaded=false;
+  function ensure(){ if(loaded) return; loaded=true; var s=video.getAttribute('data-src'); if(s&&!video.getAttribute('src')){ video.setAttribute('src',s); try{video.load();}catch(e){} } }
+  function reveal(){ if(frame.classList.contains('is-video-error')) return; frame.classList.add('is-video-playing'); }
+  function play(){ reinforce(); video.autoplay=true; var p; try{p=video.play();}catch(e){return;} if(p&&p.then) p.then(function(){}).catch(function(){}); }
+  video.addEventListener('playing',reveal);
+  video.addEventListener('canplay',play);
+  video.addEventListener('loadeddata',play);
+  video.addEventListener('error',function(){ frame.classList.add('is-video-error'); frame.classList.remove('is-video-playing','is-intro-hidden'); });
+  if(intro) intro.addEventListener('transitionend',function(e){ if(e.propertyName==='opacity'&&frame.classList.contains('is-video-playing')&&!frame.classList.contains('is-video-error')) frame.classList.add('is-intro-hidden'); });
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){es.forEach(function(en){ if(en.isIntersecting){ ensure(); play(); io.unobserve(frame);} });},{rootMargin:'300px 0px'});
+    io.observe(frame);
+    var io2=new IntersectionObserver(function(es){es.forEach(function(en){ if(en.isIntersecting){ if(video.getAttribute('src')) play(); } else { try{video.pause();}catch(e){} } });},{threshold:.1});
+    io2.observe(frame);
+  } else { ensure(); play(); }
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden && video.getAttribute('src')) play(); });
+})();
+</script>
+</body>
+</html>

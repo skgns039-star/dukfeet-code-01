@@ -1,0 +1,346 @@
+<!-- =====================================================================
+  DUKFEET 상품 모델 영상 위젯 (아임웹 코드 위젯 전체 붙여넣기용)
+  - HTML + CSS + JavaScript 단일 파일, 외부 라이브러리 없음
+  - 첫 화면: DUKFEET 로고(포스터)가 절제된 페이드인 → 영상 재생 시 크로스페이드
+  - 영상 상하 검은 띠는 재인코딩 없이 CSS 크롭(transform: scale)으로 처리
+  - 공개 리소스: GitHub Pages (HTTPS 절대 URL)
+====================================================================== -->
+
+<section
+  class="dukfeet-product-motion"
+  aria-labelledby="dukfeet-motion-title"
+  aria-describedby="dukfeet-motion-description">
+
+  <div class="dukfeet-product-motion__copy">
+    <h2 id="dukfeet-motion-title" class="dukfeet-product-motion__title">
+      DUKFEET 핸드메이드 가죽 신발 착용 영상
+    </h2>
+    <p id="dukfeet-motion-description" class="dukfeet-product-motion__description">
+      모델의 움직임을 통해 DUKFEET 핸드메이드 가죽 신발의
+      실루엣과 착화 모습을 확인할 수 있습니다.
+    </p>
+  </div>
+
+  <div class="dukfeet-product-motion__frame" data-dukfeet-motion>
+
+    <!-- 첫 화면 인트로 로고(실제 DUKFEET 로고 이미지). 정사각 로고라 contain으로 잘림 방지 -->
+    <img
+      class="dukfeet-product-motion__intro"
+      src="https://skgns039-star.github.io/dukfeet-code-01/images/dukfeet-product-model-poster.png"
+      alt="DUKFEET 핸드메이드 가죽 신발 브랜드 로고"
+      width="410"
+      height="410"
+      decoding="async">
+
+    <!-- 배경 상품 영상. src는 화면 근처 도달 시 JS가 data-src에서 주입(지연 로딩) -->
+    <video
+      class="dukfeet-product-motion__video"
+      muted
+      loop
+      playsinline
+      preload="none"
+      poster="https://skgns039-star.github.io/dukfeet-code-01/images/dukfeet-product-model-poster.png"
+      aria-label="DUKFEET 핸드메이드 가죽 신발의 착화 모습과 움직임을 보여주는 모델 영상"
+      data-src="https://skgns039-star.github.io/dukfeet-code-01/videos/dukfeet-product-model-video.mp4?v=1">
+    </video>
+
+    <noscript>
+      <img
+        src="https://skgns039-star.github.io/dukfeet-code-01/images/dukfeet-product-model-poster.png"
+        alt="DUKFEET 핸드메이드 가죽 신발 브랜드 로고"
+        loading="lazy">
+    </noscript>
+
+  </div>
+</section>
+
+<style>
+  /* ── 조절용 변수 (여기 값만 바꾸면 됩니다) ───────────────────────── */
+  .dukfeet-product-motion {
+    --dukfeet-video-max-width: 1200px;
+    --dukfeet-video-aspect-ratio: 16 / 9;
+    --dukfeet-video-crop-scale: 1.12;     /* PC 검은 띠 크롭값: 띠 남으면 1.15~1.18, 좌우 많이 잘리면 1.08~1.05 */
+    --dukfeet-video-position-x: 50%;       /* 피사체가 좌우로 치우치면 조절 */
+    --dukfeet-video-position-y: 50%;       /* 피사체가 위아래로 치우치면 조절 */
+    --dukfeet-video-radius: 0px;
+    --dukfeet-section-padding-y: 72px;
+    --dukfeet-section-padding-x: 24px;
+
+    --dukfeet-intro-enter-duration: 800ms;   /* 로고 페이드인 시간 */
+    --dukfeet-intro-settle-duration: 1500ms; /* 로고 미세 확대 안정화 시간 */
+    --dukfeet-video-reveal-duration: 900ms;  /* 영상 크로스페이드 시간 */
+    --dukfeet-intro-start-scale: 1.02;       /* 로고 시작 배율(과하지 않게) */
+    --dukfeet-motion-ease: cubic-bezier(.22, .61, .36, 1);
+  }
+
+  .dukfeet-product-motion,
+  .dukfeet-product-motion * { box-sizing: border-box; }
+
+  .dukfeet-product-motion {
+    width: 100%;
+    margin: 0;
+    padding: var(--dukfeet-section-padding-y) var(--dukfeet-section-padding-x);
+    color: #1a1a1a;
+    font-family: inherit;
+  }
+
+  .dukfeet-product-motion__copy {
+    max-width: var(--dukfeet-video-max-width);
+    margin: 0 auto 22px;
+    text-align: center;
+  }
+  .dukfeet-product-motion__title {
+    margin: 0 0 10px;
+    font-size: clamp(18px, 2.4vw, 26px);
+    font-weight: 700;
+    letter-spacing: .01em;
+    line-height: 1.3;
+  }
+  .dukfeet-product-motion__description {
+    margin: 0;
+    font-size: clamp(13px, 1.4vw, 15px);
+    line-height: 1.7;
+    color: #555;
+  }
+
+  /* 16:9 프레임 */
+  .dukfeet-product-motion__frame {
+    position: relative;
+    width: 100%;
+    max-width: var(--dukfeet-video-max-width);
+    margin: 0 auto;
+    aspect-ratio: var(--dukfeet-video-aspect-ratio);
+    overflow: hidden;
+    background: #000;
+    border-radius: var(--dukfeet-video-radius);
+    line-height: 0;
+  }
+
+  /* 영상: cover + scale 크롭으로 상하 검은 띠를 프레임 밖으로 밀어냄
+     (MP4 원본 해상도는 변하지 않음. 과도한 확대는 체감 선명도를 낮출 수 있음) */
+  .dukfeet-product-motion__video {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    object-fit: cover;
+    object-position: var(--dukfeet-video-position-x) var(--dukfeet-video-position-y);
+    transform: scale(var(--dukfeet-video-crop-scale));
+    transform-origin: center center;
+    background: #000;
+    opacity: 0;
+    transition: opacity var(--dukfeet-video-reveal-duration) var(--dukfeet-motion-ease);
+    will-change: opacity;
+  }
+
+  /* 인트로 로고: 정사각 로고이므로 contain으로 잘리지 않게 표시
+     (히어로 배경형 이미지로 바꾸면 cover로 변경 가능) */
+  .dukfeet-product-motion__intro {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    background: #000;
+    opacity: 0;
+    transform: scale(var(--dukfeet-intro-start-scale));
+    transition:
+      opacity var(--dukfeet-intro-enter-duration) var(--dukfeet-motion-ease),
+      transform var(--dukfeet-intro-settle-duration) var(--dukfeet-motion-ease);
+    will-change: opacity, transform;
+  }
+
+  /* 화면 진입 후 로고 등장(페이드인 + 미세 확대 안정화) */
+  .dukfeet-product-motion__frame.is-intro-visible .dukfeet-product-motion__intro {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* 영상이 실제 재생되기 시작하면 영상 표시 + 로고 페이드아웃 */
+  .dukfeet-product-motion__frame.is-video-playing .dukfeet-product-motion__video {
+    opacity: 1;
+  }
+  .dukfeet-product-motion__frame.is-video-playing .dukfeet-product-motion__intro {
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* 페이드아웃 완료 후에만 visibility 제거(전환 도중 사라짐 방지) */
+  .dukfeet-product-motion__frame.is-intro-hidden .dukfeet-product-motion__intro {
+    visibility: hidden;
+  }
+
+  /* 영상 오류 시: 로고를 다시/계속 표시, 영상 숨김 */
+  .dukfeet-product-motion__frame.is-video-error .dukfeet-product-motion__video {
+    opacity: 0;
+  }
+  .dukfeet-product-motion__frame.is-video-error .dukfeet-product-motion__intro {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: none;
+  }
+
+  /* 모바일 */
+  @media (max-width: 767px) {
+    .dukfeet-product-motion {
+      --dukfeet-video-crop-scale: 1.10;   /* 모바일 검은 띠 크롭값 */
+      --dukfeet-section-padding-y: 40px;
+      --dukfeet-section-padding-x: 16px;
+      --dukfeet-intro-start-scale: 1.015;
+    }
+  }
+
+  /* 모션 감소 환경: 전환/애니메이션 제거, 포스터 안정 표시 */
+  @media (prefers-reduced-motion: reduce) {
+    .dukfeet-product-motion__intro,
+    .dukfeet-product-motion__video {
+      transition: none !important;
+      animation: none !important;
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function initOne(frame) {
+    if (frame.__dukfeetMotionInit) return;
+    frame.__dukfeetMotionInit = true;
+
+    var video = frame.querySelector('.dukfeet-product-motion__video');
+    var intro = frame.querySelector('.dukfeet-product-motion__intro');
+    if (!video) return;
+
+    /* 1) 인트로 로고 표시: 로드 완료(또는 캐시 complete) 시 페이드인 */
+    function showIntro() { frame.classList.add('is-intro-visible'); }
+    if (intro) {
+      if (intro.complete && intro.naturalWidth > 0) showIntro();
+      else {
+        intro.addEventListener('load', showIntro, { once: true });
+        intro.addEventListener('error', showIntro, { once: true }); // 로드 실패해도 레이어 유지
+      }
+    } else {
+      showIntro();
+    }
+
+    /* 영상 속성 강제(아임웹/모바일 정책 대비) */
+    function reinforce() {
+      video.muted = true;
+      video.defaultMuted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.setAttribute('muted', '');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+    }
+
+    var loaded = false;
+    function ensureLoaded() {
+      if (loaded) return;
+      loaded = true;
+      var src = video.getAttribute('data-src');
+      if (src && !video.getAttribute('src')) {
+        video.setAttribute('src', src);
+        try { video.load(); } catch (e) {}
+      }
+    }
+
+    var hasPlayed = false;
+    function revealVideo() {
+      if (frame.classList.contains('is-video-error')) return;
+      hasPlayed = true;
+      frame.classList.add('is-video-playing');
+    }
+
+    function attemptPlay() {
+      reinforce();
+      video.autoplay = true;
+      var p;
+      try { p = video.play(); } catch (e) { return; }
+      if (p && typeof p.then === 'function') {
+        p.then(function () { /* 'playing' 이벤트에서 reveal */ })
+         .catch(function () { /* 자동재생 차단 → 로고 유지, 추후 재시도 */ });
+      }
+    }
+
+    /* 실제 재생이 시작된 경우에만 로고→영상 전환 */
+    video.addEventListener('playing', revealVideo);
+    /* canplay/loadeddata만으로는 숨기지 않음. 재생만 시도 */
+    video.addEventListener('canplay', attemptPlay);
+    video.addEventListener('loadeddata', attemptPlay);
+
+    video.addEventListener('error', function () {
+      frame.classList.add('is-video-error');
+      frame.classList.remove('is-video-playing', 'is-intro-hidden');
+    });
+
+    /* 페이드아웃 완료 후 visibility 제거(전환 중 사라짐 방지) */
+    if (intro) {
+      intro.addEventListener('transitionend', function (e) {
+        if (e.propertyName === 'opacity' &&
+            frame.classList.contains('is-video-playing') &&
+            !frame.classList.contains('is-video-error')) {
+          frame.classList.add('is-intro-hidden');
+        }
+      });
+    }
+
+    /* 2) 지연 로딩 + 가시성 기반 재생/일시정지 */
+    function inViewStart() {
+      ensureLoaded();
+      if (REDUCED) { attemptPlay(); return; } // 모션 감소: 즉시(전환 없이) 처리
+      attemptPlay();
+    }
+
+    if ('IntersectionObserver' in window) {
+      var ioLoad = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { inViewStart(); ioLoad.unobserve(frame); }
+        });
+      }, { rootMargin: '300px 0px' });
+      ioLoad.observe(frame);
+
+      var ioPlay = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) {
+            if (video.getAttribute('src')) attemptPlay();
+          } else {
+            try { video.pause(); } catch (e) {}
+          }
+        });
+      }, { threshold: 0.1 });
+      ioPlay.observe(frame);
+    } else {
+      inViewStart();
+    }
+
+    /* 3) 탭 재활성화 시 재생 재시도 */
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && video.getAttribute('src') && hasPlayed === false) attemptPlay();
+      else if (!document.hidden && video.getAttribute('src')) attemptPlay();
+    });
+  }
+
+  function initAll() {
+    var frames = document.querySelectorAll('[data-dukfeet-motion]');
+    for (var i = 0; i < frames.length; i++) initOne(frames[i]);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
+  }
+  /* 아임웹 지연 렌더링 대비 */
+  setTimeout(initAll, 500);
+  setTimeout(initAll, 1500);
+})();
+</script>

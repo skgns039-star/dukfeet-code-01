@@ -1,0 +1,31 @@
+# --- CapCut 임시/캐시 ---
+CapCut/
+*.capcut
+*.cache
+cache/
+*.tmp
+*.temp
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- 로그/임시 ---
+*.log
+logs/
+
+# --- 환경변수/비밀정보 (저장소에 절대 포함 금지) ---
+.env
+.env.*
+*.key
+*.pem
+*.p12
+secrets*
+*secret*
+
+# --- 에디터 ---
+.vscode/
+.idea/
+
+# 주의: 배포 대상(videos/*.mp4, images/*.png, *.html)은 제외하지 않습니다.
