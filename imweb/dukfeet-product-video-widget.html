@@ -1,9 +1,11 @@
 <!-- =====================================================================
   DUKFEET 상품 영상 히어로 섹션 (아임웹 코드 위젯 전체 붙여넣기용)
   - 영상 단독: 로고/포스터/인트로 이미지·애니메이션 전부 제거
-  - 16:9 고정, 화면 가로폭 풀폭(full-bleed), 좌우/상하 여백 없음
-  - 검은 상하 띠는 원본 재인코딩 없이 CSS scale 크롭으로 가림(비율 왜곡 없음)
+  - 데스크탑: 풀폭 2.40:1(콘텐츠 비율) / 모바일: 4:5 세로형(중앙 크롭)
+  - 원본에 구워진 검은 띠는 재인코딩 없이 object-fit:cover(+필요분 scale)로 크롭
+    → 비율 왜곡·해상도 손실 없음(데스크탑 확대 0 = 원본 화질 그대로)
   - autoplay / muted / loop / playsinline / 컨트롤 숨김
+  - 성능: 화면 밖이면 자동 일시정지(IntersectionObserver)로 오프스크린 디코딩 차단
   - 외부 라이브러리 없음. 전역 스타일 비침투(고유 클래스 dukfeet-hero-video)
 ====================================================================== -->
 
@@ -11,7 +13,7 @@
   <div class="dukfeet-hero-video__frame">
     <video
       class="dukfeet-hero-video__media"
-      src="https://skgns039-star.github.io/dukfeet-code-01/videos/dukfeet-product-model-video-v2.mp4?v=1"
+      src="https://skgns039-star.github.io/dukfeet-code-01/videos/dukfeet-product-model-video-v2.mp4?v=0918-b628a17ed4cd"
       autoplay
       muted
       loop
@@ -19,19 +21,34 @@
       webkit-playsinline
       preload="auto"
       disablepictureinpicture
+      disableremoteplayback
+      x5-playsinline
+      x5-video-player-type="h5"
       aria-label="DUKFEET 핸드메이드 가죽 신발의 착화 모습과 움직임을 보여주는 모델 영상">
     </video>
   </div>
 </section>
 
 <style>
-  /* ── 크롭/위치 조절 변수 (검은 띠가 남으면 값 ↑, 좌우 많이 잘리면 값 ↓) ── */
+  /* ── 조절 변수 ──────────────────────────────────────────────
+     원본 영상에 검은 띠(상 135px / 하 137px, 1920×1080)가 구워져 있고
+     실제 콘텐츠는 1920×808(≈2.40:1).  object-fit:cover로 프레임을 채우되,
+     프레임이 콘텐츠보다 세로로 길면 cover가 띠를 못 가리므로 그만큼만 scale로 크롭.
+
+     · --dukfeet-pad   : 프레임 높이(가로 대비 %). 클수록 세로로 길어짐.
+         41.67% ≈ 2.40:1 / 56.25% = 16:9 / 100% = 1:1 / 125% = 4:5(세로형)
+     · --dukfeet-scale : 띠 제거용 확대. 프레임이 2.40:1보다 길면 1.34 이상 필요.
+         2.40:1(=41.67%)이면 cover만으로 띠가 잘려 1(확대 없음)이면 됨.
+     · --dukfeet-pos-x/y : 크롭 중심(피사체 위치) 보정. 기본 50% 50%(가운데).
+
+     [데스크탑] 풀폭 2.40:1 + scale 1 → 좌우 잘림·확대 0 = 원본 화질 그대로.
+     [모바일]   세로형(기본 4:5)으로 크게 + 좌우 중앙크롭. 화면폭(~390px)이
+                원본폭(1920px)보다 훨씬 작아 크롭/확대해도 화질 저하 거의 없음. */
   .dukfeet-hero-video {
-    --dukfeet-video-scale-desktop: 1.12;  /* PC 검은 띠 크롭 배율 */
-    --dukfeet-video-scale-tablet: 1.11;   /* 태블릿 */
-    --dukfeet-video-scale-mobile: 1.10;   /* 모바일 */
-    --dukfeet-video-position-x: 50%;      /* 피사체 좌우 치우침 보정 */
-    --dukfeet-video-position-y: 50%;      /* 피사체 상하 치우침 보정 */
+    --dukfeet-pad: 41.67%;   /* 데스크탑: 2.40:1 풀폭 */
+    --dukfeet-scale: 1;      /* 데스크탑: cover만으로 띠 제거(확대 없음) */
+    --dukfeet-pos-x: 50%;    /* 크롭 가로 중심 */
+    --dukfeet-pos-y: 50%;    /* 크롭 세로 중심 */
   }
 
   .dukfeet-hero-video,
@@ -51,39 +68,50 @@
     background: #000;
   }
 
-  /* 16:9 프레임 (padding-bottom 기법 → 모든 브라우저 호환) */
+  /* 프레임: 높이를 콘텐츠 영역에 맞춰 검은 띠를 프레임 밖으로 클립 (padding-bottom → 전 브라우저 호환) */
   .dukfeet-hero-video__frame {
     position: relative;
     width: 100%;
     height: 0;
-    padding-bottom: 56.25%;          /* 9 / 16 = 0.5625 → 항상 16:9 */
-    overflow: hidden;                /* 크롭된 검은 띠를 프레임 밖으로 */
+    padding-bottom: var(--dukfeet-pad);          /* 프레임 비율(데스크탑 2.40:1, 모바일 세로형) */
+    overflow: hidden;                /* 위·아래 검은 띠를 프레임 밖으로 */
     background: #000;
+    contain: layout paint style;     /* 리페인트를 이 영역으로 격리 → 페이지 전체 렉↓ */
   }
 
-  /* 영상: 프레임을 꽉 채움 + 비율 유지(왜곡 금지) + scale로 띠 크롭 */
+  /* 영상: cover로 프레임을 비율 유지하며 채움(왜곡 없음). 넘치는 검은 띠는 프레임 밖으로.
+     scale은 띠 제거에 필요한 만큼만(데스크탑 1=확대 없음). pos-x/y로 크롭 중심 조절. */
   .dukfeet-hero-video__media {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
+    object-fit: cover;               /* 비율 유지 채움(fill 아님 = 왜곡 없음) */
+    object-position: var(--dukfeet-pos-x) var(--dukfeet-pos-y);
+    transform: scale(var(--dukfeet-scale)) translateZ(0);  /* 띠 크롭 + GPU 레이어 승격 */
+    transform-origin: center center;
+    will-change: transform;
+    backface-visibility: hidden;
     display: block;
     border: 0;
-    object-fit: cover;               /* 비율 유지하며 채움(fill 아님) */
-    object-position: var(--dukfeet-video-position-x) var(--dukfeet-video-position-y);
-    transform: scale(var(--dukfeet-video-scale-desktop));
-    transform-origin: center center;
+    margin: 0;
+    padding: 0;
     background: #000;
     pointer-events: none;            /* 컨트롤/클릭 비활성(장식 배경) */
   }
 
-  /* 태블릿 */
-  @media (max-width: 1024px) {
-    .dukfeet-hero-video__media { transform: scale(var(--dukfeet-video-scale-tablet)); }
-  }
-  /* 모바일 */
+  /* 모바일: 2:1(현재 2.40:1보다 세로↑). 좌우 약 12%씩만 트림, 확대 1.34로 띠 제거.
+     측정상 소스→화면 1.22(≥1)라 업스케일 없음 = 원본 화질 유지.
+     ※ 원본이 1920×808(2.40:1)이라 '좌우 트림 0'으로는 2.40:1이 한계.
+       더 키우려면(16:9 등) --dukfeet-pad만 ↑ — scale 1.34 유지 시 좌우 트림은
+       12%로 동일하고 화질도 유지됨(단 너무 키우면 검은 띠가 다시 보일 수 있음).
+       인물이 잘리면 --dukfeet-pos-y 조절(예: 42% 위로 / 58% 아래로). */
   @media (max-width: 767px) {
-    .dukfeet-hero-video__media { transform: scale(var(--dukfeet-video-scale-mobile)); }
+    .dukfeet-hero-video {
+      --dukfeet-pad: 56.25%;         /* 16:9 (세로 최대치 — 화질 유지 한도) */
+      --dukfeet-scale: 1.36;         /* 띠 제거(16:9는 한계선이라 1.36으로 안전마진) + 좌우 13% 트림 */
+      --dukfeet-pos-y: 50%;
+    }
   }
 </style>
 
@@ -104,21 +132,45 @@
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
 
+    /* 화면 안일 때 재생을 원하는 상태. 옵저버가 없으면 항상 true로 동작. */
+    var wantPlay = true;
+
     function play() {
       var p;
       try { p = video.play(); } catch (e) { return; }
-      if (p && typeof p.then === 'function') { p.then(function () {}).catch(function () {}); }
+      if (p && typeof p.then === 'function') p.then(function () {}).catch(function () {});
     }
+    function pause() { try { video.pause(); } catch (e) {} }
 
+    /* 즉시 1차 재생 시도(autoplay 속성과 더불어 확실히 재생) */
     play();
     video.addEventListener('canplay', play);
     video.addEventListener('loadeddata', play);
 
-    /* 탭 재활성화/첫 상호작용 시 재생 재시도(자동재생 차단 대비) */
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) play(); });
-    ['touchstart', 'click'].forEach(function (ev) {
-      window.addEventListener(ev, function once() { play(); window.removeEventListener(ev, once); }, { once: true, passive: true });
+    /* 성능 최적화: 화면(뷰포트) 밖이면 일시정지, 들어오면 재생 → 오프스크린 디코딩만 차단.
+       (초기 재생은 autoplay + 위 play()가 책임지므로, 옵저버 지연이 빈 화면을 만들지 않음) */
+    if ('IntersectionObserver' in window) {
+      try {
+        var io = new IntersectionObserver(function (entries) {
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].isIntersecting) { wantPlay = true; play(); }
+            else { wantPlay = false; pause(); }
+          }
+        }, { rootMargin: '200px 0px', threshold: 0.01 });
+        io.observe(video);
+      } catch (e) {}
+    }
+
+    /* 탭 재활성화 시 화면 안이면 재생 재시도(차단 정책 대비) */
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) pause();
+      else if (wantPlay) play();
     });
+
+    /* 자동재생이 막힌 경우, 첫 사용자 상호작용 시 1회 재생 시도 */
+    var kick = function () { if (wantPlay) play(); window.removeEventListener('touchstart', kick); window.removeEventListener('click', kick); };
+    window.addEventListener('touchstart', kick, { once: true, passive: true });
+    window.addEventListener('click', kick, { once: true, passive: true });
   }
 
   function init() {
@@ -128,8 +180,7 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
-  /* 아임웹 지연 렌더링 대비 */
-  setTimeout(init, 500);
-  setTimeout(init, 1500);
+  /* 아임웹 지연 렌더링 대비(중복 호출은 __dukfeetHeroInit 가드로 무시됨) */
+  setTimeout(init, 800);
 })();
 </script>
