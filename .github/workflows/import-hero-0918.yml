@@ -1,0 +1,58 @@
+name: Import verified 0918 hero video
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/import-hero-0918.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify original bytes and upload Git blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          import urllib.request
+
+          source = 'https://d2ol7oe51mr4n9.cloudfront.net/user_3J6HQ3YtbRrcEOHwI6pcQFCHglN/405b72cb-4fbb-4215-9576-086392ea7b2c.mp4'
+          expected_size = 55232948
+          expected_sha256 = 'b628a17ed4cd99e4b24e863644ce74336621eb8dc8ffab0277c6c1b7a5750b86'
+          expected_blob = 'a136e78da5206cee00431bcd0b7ecf5744d15302'
+          request = urllib.request.Request(source, headers={'User-Agent': 'DUKFEET-media-import'})
+          with urllib.request.urlopen(request, timeout=90) as response:
+              data = response.read(expected_size + 1)
+          if len(data) != expected_size or hashlib.sha256(data).hexdigest() != expected_sha256:
+              raise RuntimeError('Source video does not match the user attachment; no upload performed')
+          blob = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          if blob != expected_blob:
+              raise RuntimeError('Unexpected Git blob hash')
+          payload = json.dumps({'content': base64.b64encode(data).decode('ascii'), 'encoding': 'base64'}).encode()
+          request = urllib.request.Request(
+              'https://api.github.com/repos/skgns039-star/dukfeet-code-01/git/blobs',
+              data=payload,
+              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'User-Agent': 'DUKFEET-media-import', 'X-GitHub-Api-Version': '2022-11-28'},
+              method='POST'
+          )
+          with urllib.request.urlopen(request, timeout=120) as response:
+              result = json.load(response)
+          if result.get('sha') != expected_blob:
+              raise RuntimeError('GitHub returned an unexpected blob hash')
+          print('VERIFIED_VIDEO_BLOB=' + result['sha'])
+          print('VERIFIED_VIDEO_SIZE=' + str(expected_size))
+          print('VERIFIED_SHA256=' + expected_sha256)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('0918.mp4 original bytes verified and stored as Git blob.\n\n')
+              summary.write('Size: ' + str(expected_size) + '\n\nSHA-256: ' + expected_sha256 + '\n\nBlob: ' + result['sha'] + '\n')
+              summary.write('\nLive video paths and page code are not changed by this staging step.\n')
+          PY
