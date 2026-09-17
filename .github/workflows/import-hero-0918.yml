@@ -12,20 +12,19 @@ permissions:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Restore exact original container and upload verified Git blob
+      - name: Restore exact original container and publish verified video
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import base64, hashlib, json, lzma, os, struct, urllib.request
+          import base64, hashlib, json, lzma, os, pathlib, struct, subprocess, tempfile, urllib.request
 
           repo = 'https://api.github.com/repos/skgns039-star/dukfeet-code-01'
-          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'User-Agent': 'DUKFEET-media-import', 'X-GitHub-Api-Version': '2022-11-28'}
-          def api(path, payload=None):
-              request = urllib.request.Request(repo + path, data=None if payload is None else json.dumps(payload).encode(), headers=headers, method='GET' if payload is None else 'POST')
-              with urllib.request.urlopen(request, timeout=120) as response:
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'User-Agent': 'DUKFEET-media-import', 'X-GitHub-Api-Version': '2022-11-28'}
+          def api(path):
+              with urllib.request.urlopen(urllib.request.Request(repo+path, headers=headers), timeout=90) as response:
                   return json.load(response)
 
           source_url = 'https://d2ol7oe51mr4n9.cloudfront.net/user_3J6HQ3YtbRrcEOHwI6pcQFCHglN/405b72cb-4fbb-4215-9576-086392ea7b2c.mp4'
@@ -34,8 +33,8 @@ jobs:
           if len(source) != 55243389 or hashlib.sha256(source).hexdigest() != '1fbbbfc8606aff3e48356767396a7df50ae1c836f6b310623867ceb5a85e11b5':
               raise RuntimeError('Unexpected transport bytes; no live changes')
 
-          # The transport remuxes MP4 metadata without changing media samples.
-          # Restore the original metadata and sample placement; never encode media.
+          # The transfer service remuxes metadata. Restore original container
+          # and original packet placement. No media encoder is used.
           metadata = api('/git/blobs/0fe07d3cd717aa37685be008b3d674f3c92734de')
           patch = lzma.decompress(base64.b64decode(metadata['content']))
           if len(patch) != 33348:
@@ -43,29 +42,26 @@ jobs:
 
           def boxes(buf, start=0, end=None):
               end = len(buf) if end is None else end
-              while start + 8 <= end:
-                  size, kind = struct.unpack_from('>I4s', buf, start)
+              while start+8 <= end:
+                  size,kind = struct.unpack_from('>I4s',buf,start)
                   header = 8
                   if size == 1:
-                      size = struct.unpack_from('>Q', buf, start+8)[0]
+                      size = struct.unpack_from('>Q',buf,start+8)[0]
                       header = 16
                   elif size == 0:
-                      size = end - start
-                  if size < header or start + size > end:
+                      size = end-start
+                  if size < header or start+size > end:
                       raise ValueError('Invalid MP4 box')
-                  yield kind, start+header, start+size
+                  yield kind,start+header,start+size
                   start += size
-
-          def child(buf, region, kind):
+          def child(buf,region,kind):
               for k,a,b in boxes(buf,*region):
                   if k == kind:
-                      return (a,b)
-              raise ValueError('Missing MP4 box ' + str(kind))
-
+                      return a,b
+              raise ValueError('Missing MP4 box '+str(kind))
           def locations(buf):
-              moov = child(buf,(0,len(buf)),b'moov')
               result = {}
-              for k,a,b in boxes(buf,*moov):
+              for k,a,b in boxes(buf,*child(buf,(0,len(buf)),b'moov')):
                   if k != b'trak':
                       continue
                   mdia = child(buf,(a,b),b'mdia')
@@ -84,8 +80,7 @@ jobs:
                   key = b'stco' if b'stco' in tables else b'co64'
                   pos = tables[key][0]
                   n = struct.unpack_from('>I',buf,pos+4)[0]
-                  fmt = 'I' if key == b'stco' else 'Q'
-                  width = 4 if fmt == 'I' else 8
+                  fmt,width = ('I',4) if key == b'stco' else ('Q',8)
                   offsets = [struct.unpack_from('>'+fmt,buf,pos+8+i*width)[0] for i in range(n)]
                   locs = []
                   sample = run = 0
@@ -102,13 +97,13 @@ jobs:
                   result[handler] = locs
               return result
 
-          expected_size = 55232948
-          expected_sha256 = 'b628a17ed4cd99e4b24e863644ce74336621eb8dc8ffab0277c6c1b7a5750b86'
+          size = 55232948
+          sha256 = 'b628a17ed4cd99e4b24e863644ce74336621eb8dc8ffab0277c6c1b7a5750b86'
           expected_blob = 'a136e78da5206cee00431bcd0b7ecf5744d15302'
-          target = bytearray(expected_size)
+          target = bytearray(size)
           target[:48] = patch[:48]
           target[-len(patch[48:]):] = patch[48:]
-          src, dst = locations(source), locations(target)
+          src,dst = locations(source),locations(target)
           if src.keys() != dst.keys():
               raise ValueError('Track mismatch')
           for track in src:
@@ -116,21 +111,46 @@ jobs:
                   raise ValueError('Packet count mismatch')
               for (sp,ss),(tp,ts) in zip(src[track],dst[track]):
                   if ss != ts or sp+ss > len(source) or tp+ts > len(target):
-                      raise ValueError('Packet size or bounds mismatch')
+                      raise ValueError('Packet bounds mismatch')
                   target[tp:tp+ts] = source[sp:sp+ss]
           data = bytes(target)
-          if len(data) != expected_size or hashlib.sha256(data).hexdigest() != expected_sha256:
-              raise RuntimeError('Restored bytes do not match original attachment; abort')
-          if hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest() != expected_blob:
-              raise RuntimeError('Unexpected original Git blob')
-          result = api('/git/blobs', {'content': base64.b64encode(data).decode('ascii'), 'encoding': 'base64'})
-          if result.get('sha') != expected_blob:
-              raise RuntimeError('GitHub returned unexpected blob')
-          print('VERIFIED_VIDEO_BLOB=' + result['sha'])
-          print('VERIFIED_VIDEO_SIZE=' + str(expected_size))
-          print('VERIFIED_SHA256=' + expected_sha256)
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
-              summary.write('0918.mp4 restored byte-for-byte and stored as verified Git blob. No encoding.\n\n')
-              summary.write('Size: '+str(expected_size)+'\n\nSHA-256: '+expected_sha256+'\n\nBlob: '+result['sha']+'\n')
-              summary.write('\nLive video and layout remain unchanged until the verified publishing commit.\n')
+          if len(data) != size or hashlib.sha256(data).hexdigest() != sha256:
+              raise RuntimeError('Original attachment hash mismatch; abort')
+          print('ORIGINAL_BYTE_FOR_BYTE_VERIFIED='+sha256, flush=True)
+
+          # Use Git transport for the 55 MB file. Read the existing tree first
+          # and replace only the two existing video paths, atomically.
+          auth = base64.b64encode(('x-access-token:'+os.environ['GH_TOKEN']).encode()).decode()
+          env = os.environ.copy()
+          env.update({'GIT_TERMINAL_PROMPT':'0','GIT_CONFIG_COUNT':'1','GIT_CONFIG_KEY_0':'http.https://github.com/.extraheader','GIT_CONFIG_VALUE_0':'AUTHORIZATION: basic '+auth})
+          with tempfile.TemporaryDirectory() as work:
+              def git(*args, input=None):
+                  completed = subprocess.run(['git','-C',work,*args], env=env, input=input, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
+                  if completed.returncode:
+                      raise RuntimeError('Git operation failed: '+completed.stderr.replace(auth,'[redacted]').replace(os.environ['GH_TOKEN'],'[redacted]'))
+                  return completed.stdout.strip()
+              git('init','--quiet')
+              git('remote','add','origin','https://github.com/skgns039-star/dukfeet-code-01.git')
+              git('fetch','--depth=1','origin','main')
+              parent = git('rev-parse','FETCH_HEAD')
+              git('read-tree',parent)
+              git('config','user.name','github-actions[bot]')
+              git('config','user.email','41898282+github-actions[bot]@users.noreply.github.com')
+              file = pathlib.Path(work)/'0918-original.mp4'
+              file.write_bytes(data)
+              blob = git('hash-object','-w',str(file))
+              if blob != expected_blob:
+                  raise RuntimeError('Git blob hash mismatch')
+              for path in ['videos/dukfeet-product-model-video.mp4','videos/dukfeet-product-model-video-v2.mp4']:
+                  git('update-index','--add','--cacheinfo','100644,'+blob+','+path)
+              tree = git('write-tree')
+              commit = git('commit-tree',tree,'-p',parent,'-m','Replace hero video with byte-identical 0918.mp4')
+              git('push','origin',commit+':refs/heads/main')
+              print('VIDEO_COMMIT='+commit, flush=True)
+          print('VERIFIED_VIDEO_BLOB='+expected_blob)
+          print('VERIFIED_VIDEO_SIZE='+str(size))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as summary:
+              summary.write('0918.mp4 published byte-for-byte to both existing video URLs. No encoding.\n\n')
+              summary.write('Size: '+str(size)+'\n\nSHA-256: '+sha256+'\n\nBlob: '+expected_blob+'\n\nCommit: '+commit+'\n')
+              summary.write('\nPage code is unchanged; a separate verified code commit will trigger Pages.\n')
           PY
