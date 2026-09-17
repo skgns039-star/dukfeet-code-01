@@ -14,45 +14,123 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify original bytes and upload Git blob
+      - name: Restore exact original container and upload verified Git blob
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import base64
-          import hashlib
-          import json
-          import os
-          import urllib.request
+          import base64, hashlib, json, lzma, os, struct, urllib.request
 
-          source = 'https://d2ol7oe51mr4n9.cloudfront.net/user_3J6HQ3YtbRrcEOHwI6pcQFCHglN/405b72cb-4fbb-4215-9576-086392ea7b2c.mp4'
+          repo = 'https://api.github.com/repos/skgns039-star/dukfeet-code-01'
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'User-Agent': 'DUKFEET-media-import', 'X-GitHub-Api-Version': '2022-11-28'}
+          def api(path, payload=None):
+              request = urllib.request.Request(repo + path, data=None if payload is None else json.dumps(payload).encode(), headers=headers, method='GET' if payload is None else 'POST')
+              with urllib.request.urlopen(request, timeout=120) as response:
+                  return json.load(response)
+
+          source_url = 'https://d2ol7oe51mr4n9.cloudfront.net/user_3J6HQ3YtbRrcEOHwI6pcQFCHglN/405b72cb-4fbb-4215-9576-086392ea7b2c.mp4'
+          with urllib.request.urlopen(source_url, timeout=90) as response:
+              source = response.read(55243390)
+          if len(source) != 55243389 or hashlib.sha256(source).hexdigest() != '1fbbbfc8606aff3e48356767396a7df50ae1c836f6b310623867ceb5a85e11b5':
+              raise RuntimeError('Unexpected transport bytes; no live changes')
+
+          # The transport remuxes MP4 metadata without changing media samples.
+          # Restore the original metadata and sample placement; never encode media.
+          metadata = api('/git/blobs/0fe07d3cd717aa37685be008b3d674f3c92734de')
+          patch = lzma.decompress(base64.b64decode(metadata['content']))
+          if len(patch) != 33348:
+              raise RuntimeError('Unexpected original container metadata')
+
+          def boxes(buf, start=0, end=None):
+              end = len(buf) if end is None else end
+              while start + 8 <= end:
+                  size, kind = struct.unpack_from('>I4s', buf, start)
+                  header = 8
+                  if size == 1:
+                      size = struct.unpack_from('>Q', buf, start+8)[0]
+                      header = 16
+                  elif size == 0:
+                      size = end - start
+                  if size < header or start + size > end:
+                      raise ValueError('Invalid MP4 box')
+                  yield kind, start+header, start+size
+                  start += size
+
+          def child(buf, region, kind):
+              for k,a,b in boxes(buf,*region):
+                  if k == kind:
+                      return (a,b)
+              raise ValueError('Missing MP4 box ' + str(kind))
+
+          def locations(buf):
+              moov = child(buf,(0,len(buf)),b'moov')
+              result = {}
+              for k,a,b in boxes(buf,*moov):
+                  if k != b'trak':
+                      continue
+                  mdia = child(buf,(a,b),b'mdia')
+                  hdlr = child(buf,mdia,b'hdlr')[0]
+                  handler = bytes(buf[hdlr+8:hdlr+12]).decode('ascii')
+                  if handler in result:
+                      raise ValueError('Ambiguous tracks')
+                  stbl = child(buf,child(buf,mdia,b'minf'),b'stbl')
+                  tables = {k:(x,y) for k,x,y in boxes(buf,*stbl)}
+                  pos = tables[b'stsz'][0]
+                  fixed,count = struct.unpack_from('>II',buf,pos+4)
+                  sizes = [fixed]*count if fixed else list(struct.unpack_from('>'+str(count)+'I',buf,pos+12))
+                  pos = tables[b'stsc'][0]
+                  n = struct.unpack_from('>I',buf,pos+4)[0]
+                  runs = [struct.unpack_from('>III',buf,pos+8+i*12) for i in range(n)]
+                  key = b'stco' if b'stco' in tables else b'co64'
+                  pos = tables[key][0]
+                  n = struct.unpack_from('>I',buf,pos+4)[0]
+                  fmt = 'I' if key == b'stco' else 'Q'
+                  width = 4 if fmt == 'I' else 8
+                  offsets = [struct.unpack_from('>'+fmt,buf,pos+8+i*width)[0] for i in range(n)]
+                  locs = []
+                  sample = run = 0
+                  for ci,offset in enumerate(offsets,1):
+                      while run+1 < len(runs) and ci >= runs[run+1][0]:
+                          run += 1
+                      for _ in range(runs[run][1]):
+                          size = sizes[sample]
+                          locs.append((offset,size))
+                          offset += size
+                          sample += 1
+                  if sample != count:
+                      raise ValueError('Sample count mismatch')
+                  result[handler] = locs
+              return result
+
           expected_size = 55232948
           expected_sha256 = 'b628a17ed4cd99e4b24e863644ce74336621eb8dc8ffab0277c6c1b7a5750b86'
           expected_blob = 'a136e78da5206cee00431bcd0b7ecf5744d15302'
-          request = urllib.request.Request(source, headers={'User-Agent': 'DUKFEET-media-import'})
-          with urllib.request.urlopen(request, timeout=90) as response:
-              data = response.read(expected_size + 1)
+          target = bytearray(expected_size)
+          target[:48] = patch[:48]
+          target[-len(patch[48:]):] = patch[48:]
+          src, dst = locations(source), locations(target)
+          if src.keys() != dst.keys():
+              raise ValueError('Track mismatch')
+          for track in src:
+              if len(src[track]) != len(dst[track]):
+                  raise ValueError('Packet count mismatch')
+              for (sp,ss),(tp,ts) in zip(src[track],dst[track]):
+                  if ss != ts or sp+ss > len(source) or tp+ts > len(target):
+                      raise ValueError('Packet size or bounds mismatch')
+                  target[tp:tp+ts] = source[sp:sp+ss]
+          data = bytes(target)
           if len(data) != expected_size or hashlib.sha256(data).hexdigest() != expected_sha256:
-              raise RuntimeError('Source video does not match the user attachment; no upload performed')
-          blob = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
-          if blob != expected_blob:
-              raise RuntimeError('Unexpected Git blob hash')
-          payload = json.dumps({'content': base64.b64encode(data).decode('ascii'), 'encoding': 'base64'}).encode()
-          request = urllib.request.Request(
-              'https://api.github.com/repos/skgns039-star/dukfeet-code-01/git/blobs',
-              data=payload,
-              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'User-Agent': 'DUKFEET-media-import', 'X-GitHub-Api-Version': '2022-11-28'},
-              method='POST'
-          )
-          with urllib.request.urlopen(request, timeout=120) as response:
-              result = json.load(response)
+              raise RuntimeError('Restored bytes do not match original attachment; abort')
+          if hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest() != expected_blob:
+              raise RuntimeError('Unexpected original Git blob')
+          result = api('/git/blobs', {'content': base64.b64encode(data).decode('ascii'), 'encoding': 'base64'})
           if result.get('sha') != expected_blob:
-              raise RuntimeError('GitHub returned an unexpected blob hash')
+              raise RuntimeError('GitHub returned unexpected blob')
           print('VERIFIED_VIDEO_BLOB=' + result['sha'])
           print('VERIFIED_VIDEO_SIZE=' + str(expected_size))
           print('VERIFIED_SHA256=' + expected_sha256)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
-              summary.write('0918.mp4 original bytes verified and stored as Git blob.\n\n')
-              summary.write('Size: ' + str(expected_size) + '\n\nSHA-256: ' + expected_sha256 + '\n\nBlob: ' + result['sha'] + '\n')
-              summary.write('\nLive video paths and page code are not changed by this staging step.\n')
+              summary.write('0918.mp4 restored byte-for-byte and stored as verified Git blob. No encoding.\n\n')
+              summary.write('Size: '+str(expected_size)+'\n\nSHA-256: '+expected_sha256+'\n\nBlob: '+result['sha']+'\n')
+              summary.write('\nLive video and layout remain unchanged until the verified publishing commit.\n')
           PY
